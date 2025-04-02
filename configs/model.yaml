@@ -1,0 +1,43 @@
+
+inherit: 'default.yaml'
+
+# 自定义模型参数
+model:
+  backbone: 'resnet50'
+  pretrained: true
+  use_fpn: true
+  embedding_dim: 1024
+
+  # 视觉特征提取
+  visual:
+    roi_size: 7
+    hidden_dim: 1024
+
+  # 文本特征提取
+  text:
+    model_name: 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
+    hidden_dim: 1024
+
+  # 空间特征提取
+  spatial:
+    hidden_dim: 1024
+
+  # 特征融合
+  fusion:
+    hidden_dim: 1024
+    attention_reduction: 16
+
+  # Transformer编码器
+  transformer:
+    hidden_dim: 768
+    nhead: 8
+    num_layers: 1
+    dropout: 0.1
+
+  # 关系预测网络
+  relation:
+    edge_feature_dim: 9
+    hidden_dim: 512
+    alpha1: 0.2  # 距离损失权重
+    alpha2: 0.2  # 方向损失权重
+    alpha3: 0.6  # 关系损失权重

@@ -1,0 +1,40 @@
+
+inherit: 'default.yaml'
+
+# 自定义训练参数
+train:
+  batch_size: 4
+  num_workers: 4
+  lr: 0.0001
+  weight_decay: 0.0001
+  momentum: 0.9
+  lr_step_size: 8
+  lr_gamma: 0.1
+  num_epochs: 100
+  early_stopping: 15
+
+  # 损失权重
+  loss_weights:
+    region_loss: 1.0
+    relation_loss: 0.5
+    contrast_loss: 0.3
+    reg_loss: 0.01
+
+  # 数据增强
+  augmentation:
+    random_flip: true
+    random_rotate: true
+    random_crop: true
+
+  # 优化器
+  optimizer: 'adamw'
+
+  # 学习率调度器
+  scheduler: 'cosine'
+  warmup_epochs: 5
+
+  # 分布式训练
+  distributed: false
+  world_size: 1
+  dist_url: 'tcp://localhost:23456'
+  dist_backend: 'nccl'
