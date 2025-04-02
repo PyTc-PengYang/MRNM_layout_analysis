@@ -7,23 +7,4 @@
 区域检测 ：执行布局元素检测和分类
 关系预测网络 ：使用图神经网络预测读取顺序
 
-
-
-
-
-目录结构
-MRNM_layout_analysis/
-│
-├── data_loader/               # 数据加载工具
-├── models/                    # 模型架构
-├── utils/                     # 用于训练和评估
-├── configs/                   # 配置文件
-├── scripts/                   # 训练/测试脚本
-├── tools/                     # 数据处理工具
-├── data/                      # 数据集目录
-├── output/                    # 输出目录
-│   ├── checkpoints/           # 已保存的模型
-│   ├── logs/                  # 训练日志
-│   ├── results/               # 测试结果
-│   └── visualizations/        # 可视化输出
-└── main.py                    # 主要入口
+数据集下载地址如下：
