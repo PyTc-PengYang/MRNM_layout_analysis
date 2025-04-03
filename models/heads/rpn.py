@@ -22,20 +22,17 @@ class RegionProposalNetwork(nn.Module):
     ):
         super(RegionProposalNetwork, self).__init__()
 
-        # 创建锚框生成器
         self.anchor_generator = ops.AnchorGenerator(
             sizes=anchor_sizes,
             aspect_ratios=aspect_ratios
         )
 
-        # 创建RPN头
         self.head = RPNHead(
             in_channels=in_channels,
             hidden_channels=hidden_channels,
             num_anchors=self.anchor_generator.num_anchors_per_location()[0]
         )
 
-        # 配置RPN参数
         self.fg_iou_thresh = fg_iou_thresh
         self.bg_iou_thresh = bg_iou_thresh
         self.batch_size_per_image = batch_size_per_image
@@ -46,29 +43,22 @@ class RegionProposalNetwork(nn.Module):
         self.min_size = 1e-3
 
     def forward(self, images, features, targets=None):
-        # 获取特征图
         features_list = [features[f] for f in features.keys() if f != 'fused']
 
-        # 生成锚框
         anchors = self.anchor_generator(images, features_list)
 
-        # 应用RPN头获取目标分数和边界框回归值
         objectness, pred_bbox_deltas = self.head(features_list)
 
-        # 处理目标分数和边界框回归值
         num_images = len(anchors)
         num_anchors_per_level = [o.shape[1] for o in objectness]
         objectness = torch.cat([o.flatten() for o in objectness], dim=0)
 
-        # 边界框回归值转换
         pred_bbox_deltas = torch.cat(
             [b.view(num_images, -1, 4) for b in pred_bbox_deltas], dim=1
         ).reshape(-1, 4)
 
-        # 训练模式：计算RPN损失
         loss_dict = {}
         if self.training and targets is not None:
-            # 分配锚框与目标的匹配关系
             matched_idxs = []
             for i in range(num_images):
                 matched_idxs_per_image = self.assign_targets_to_anchors(
@@ -76,7 +66,6 @@ class RegionProposalNetwork(nn.Module):
                 )
                 matched_idxs.append(matched_idxs_per_image)
 
-            # 计算损失
             loss_objectness, loss_rpn_box_reg = self.compute_loss(
                 objectness, pred_bbox_deltas, matched_idxs
             )
@@ -85,7 +74,6 @@ class RegionProposalNetwork(nn.Module):
                 "loss_rpn_box_reg": loss_rpn_box_reg
             }
 
-        # 生成区域建议
         proposals = self.generate_proposals(
             anchors, objectness, pred_bbox_deltas, images.shape[-2:]
         )
@@ -93,52 +81,42 @@ class RegionProposalNetwork(nn.Module):
         return proposals, loss_dict
 
     def assign_targets_to_anchors(self, anchors, targets):
-        # 计算IoU
         ious = ops.box_iou(anchors, targets)
 
-        # 找到每个锚框最匹配的目标
         matched_vals, matched_idxs = ious.max(dim=1)
 
-        # 根据IoU阈值分配正负样本
         matched_idxs[matched_vals < self.bg_iou_thresh] = -1  # 背景
         matched_idxs[matched_vals >= self.fg_iou_thresh] = 1  # 前景
 
-        # 构建采样索引
         pos_idx = torch.where(matched_idxs == 1)[0]
         neg_idx = torch.where(matched_idxs == -1)[0]
 
-        # 样本平衡
         num_pos = int(self.batch_size_per_image * self.positive_fraction)
         num_pos = min(pos_idx.numel(), num_pos)
         num_neg = self.batch_size_per_image - num_pos
         num_neg = min(neg_idx.numel(), num_neg)
 
-        # 随机采样
         perm1 = torch.randperm(pos_idx.numel(), device=pos_idx.device)[:num_pos]
         perm2 = torch.randperm(neg_idx.numel(), device=neg_idx.device)[:num_neg]
 
         pos_idx = pos_idx[perm1]
         neg_idx = neg_idx[perm2]
 
-        # 合并采样索引
         sampled_idxs = torch.cat([pos_idx, neg_idx])
         sampled_matched_idxs = matched_idxs[sampled_idxs]
 
         return sampled_matched_idxs
 
     def compute_loss(self, objectness, pred_bbox_deltas, matched_idxs, sampled_idxs=None):
-        # 构建目标向量
         objectness_targets = torch.cat([
             torch.ones_like(sampled_idxs[sampled_idxs >= 0]),
             torch.zeros_like(sampled_idxs[sampled_idxs < 0])
         ], dim=0)
 
-        # 计算目标损失
         loss_objectness = F.binary_cross_entropy_with_logits(
             objectness, objectness_targets
         )
 
-        # 计算边界框回归损失
         loss_rpn_box_reg = F.smooth_l1_loss(
             pred_bbox_deltas[matched_idxs >= 0],
             targets[matched_idxs[matched_idxs >= 0]],
@@ -153,41 +131,34 @@ class RegionProposalNetwork(nn.Module):
         for i, (anchors_per_image, objectness_per_image, pred_bbox_deltas_per_image) in enumerate(
                 zip(anchors, objectness, pred_bbox_deltas)
         ):
-            # 获取当前模式下的NMS前后数量
             pre_nms_top_n = self.pre_nms_top_n['training'] if self.training else self.pre_nms_top_n['testing']
             post_nms_top_n = self.post_nms_top_n['training'] if self.training else self.post_nms_top_n['testing']
 
-            # 应用边界框回归
             proposals_per_image = self.apply_deltas_to_anchors(
                 pred_bbox_deltas_per_image, anchors_per_image
             )
 
-            # 裁剪到图像边界
             proposals_per_image = self.clip_proposals_to_image(
                 proposals_per_image, image_size
             )
 
-            # 移除小框
             keep = self.remove_small_boxes(proposals_per_image, self.min_size)
 
             proposals_per_image = proposals_per_image[keep]
             objectness_per_image = objectness_per_image[keep]
 
-            # 根据分数选取前K个建议
             top_n = min(pre_nms_top_n, objectness_per_image.shape[0])
             _, topk_idx = objectness_per_image.topk(top_n, sorted=True)
 
             proposals_per_image = proposals_per_image[topk_idx]
             objectness_per_image = objectness_per_image[topk_idx]
 
-            # 应用NMS
             keep = ops.nms(
                 proposals_per_image,
                 objectness_per_image,
                 self.nms_thresh
             )
 
-            # 选取NMS后的前K个建议
             keep = keep[:post_nms_top_n]
             proposals_per_image = proposals_per_image[keep]
 
@@ -196,25 +167,21 @@ class RegionProposalNetwork(nn.Module):
         return proposals
 
     def apply_deltas_to_anchors(self, deltas, anchors):
-        # 提取锚框坐标
         widths = anchors[:, 2] - anchors[:, 0]
         heights = anchors[:, 3] - anchors[:, 1]
         ctr_x = anchors[:, 0] + 0.5 * widths
         ctr_y = anchors[:, 1] + 0.5 * heights
 
-        # 提取回归值
         dx = deltas[:, 0]
         dy = deltas[:, 1]
         dw = deltas[:, 2]
         dh = deltas[:, 3]
 
-        # 应用回归值
         ctr_x = ctr_x + dx * widths
         ctr_y = ctr_y + dy * heights
         widths = widths * torch.exp(dw)
         heights = heights * torch.exp(dh)
 
-        # 转换回(x1, y1, x2, y2)格式
         x1 = ctr_x - 0.5 * widths
         y1 = ctr_y - 0.5 * heights
         x2 = ctr_x + 0.5 * widths
