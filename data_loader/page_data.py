@@ -9,9 +9,9 @@ from typing import List, Dict, Tuple
 class TextRegion:
     id: str
     type: str
-    coords: np.ndarray  # 坐标点数组
-    text_lines: List[Dict]  # 文本行
-    text: str  # 区域文本内容
+    coords: np.ndarray  
+    text_lines: List[Dict]  
+    text: str  
 
 
 class PageData:
@@ -29,16 +29,13 @@ class PageData:
 
         ns = {'ns0': 'http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15'}
 
-        # 获取图像文件名和尺寸
         page = root.find('ns0:Page', ns)
         image_filename = page.get('imageFilename')
         self.image_width = int(page.get('imageWidth'))
         self.image_height = int(page.get('imageHeight'))
 
-        # 加载图像
         self.image_path = f"{self.image_dir}/{image_filename}"
 
-        # 解析阅读顺序
         reading_order = page.find('.//ns0:ReadingOrder/ns0:OrderedGroup', ns)
         if reading_order is not None:
             for region_ref in reading_order.findall('.//ns0:RegionRefIndexed', ns):
@@ -46,20 +43,15 @@ class PageData:
                 region_id = region_ref.get('regionRef')
                 self.reading_order.append((index, region_id))
 
-            # 按索引排序
             self.reading_order.sort(key=lambda x: x[0])
 
-        # 解析文本区域
         for region in page.findall('.//ns0:TextRegion', ns):
             region_id = region.get('id')
             region_type = region.get('type', '')
-
-            # 提取区域坐标
             coords_elem = region.find('.//ns0:Coords', ns)
             points_str = coords_elem.get('points')
             coords = self._parse_points(points_str)
 
-            # 提取文本行
             text_lines = []
             for line in region.findall('.//ns0:TextLine', ns):
                 line_id = line.get('id')
@@ -67,14 +59,12 @@ class PageData:
                 line_points_str = line_coords_elem.get('points')
                 line_coords = self._parse_points(line_points_str)
 
-                # 提取基线
                 baseline_elem = line.find('.//ns0:Baseline', ns)
                 baseline = None
                 if baseline_elem is not None:
                     baseline_points_str = baseline_elem.get('points')
                     baseline = self._parse_points(baseline_points_str)
 
-                # 提取文本内容
                 text_equiv = line.find('.//ns0:TextEquiv/ns0:Unicode', ns)
                 text = text_equiv.text if text_equiv is not None and text_equiv.text else ""
 
@@ -85,7 +75,6 @@ class PageData:
                     'text': text
                 })
 
-            # 提取区域文本内容
             text_elem = region.find('.//ns0:Text', ns)
             region_text = ""
             if text_elem is not None and text_elem.text:
