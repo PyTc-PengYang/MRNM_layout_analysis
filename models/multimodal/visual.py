@@ -8,7 +8,6 @@ class VisualEmbedding(nn.Module):
         super(VisualEmbedding, self).__init__()
         self.embedding_dim = embedding_dim
 
-        # 全连接层
         self.fc = nn.Linear(256 * 7 * 7, embedding_dim)
         self.relu = nn.ReLU(inplace=True)
         self.layer_norm = nn.LayerNorm(embedding_dim)
@@ -18,17 +17,15 @@ class VisualEmbedding(nn.Module):
         visual_embeds = []
 
         for i in range(batch_size):
-            # 使用RoIAlign提取区域特征
             if len(regions[i]) > 0:
                 roi_features = ops.roi_align(
                     features[i:i + 1],
                     [regions[i]],
                     output_size=(7, 7),
-                    spatial_scale=1.0 / 16.0,  # 根据特征图的下采样率调整
+                    spatial_scale=1.0 / 16.0,  
                     sampling_ratio=2
                 )
 
-                # 将特征展平并通过全连接层
                 roi_features = roi_features.view(roi_features.size(0), -1)
                 region_embeds = self.fc(roi_features)
                 region_embeds = self.relu(region_embeds)
@@ -36,7 +33,6 @@ class VisualEmbedding(nn.Module):
 
                 visual_embeds.append(region_embeds)
             else:
-                # 处理没有区域的情况
                 visual_embeds.append(torch.zeros((0, self.embedding_dim), device=features.device))
 
         return visual_embeds
