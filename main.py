@@ -58,7 +58,6 @@ def load_config(config_path):
 
 
 def merge_dict(d1, d2):
-    """递归合并字典"""
     for key, value in d2.items():
         if key in d1 and isinstance(value, dict) and isinstance(d1[key], dict):
             merge_dict(d1[key], value)
